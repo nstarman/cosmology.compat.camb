@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
-
-from cosmology.api import CosmologyNamespace, CosmologyWrapper
-from numpy import floating
-from numpy.typing import ArrayLike, NDArray
+from typing import TYPE_CHECKING, Any, Union, cast
 
 import camb
+from numpy import floating
+from numpy.typing import NDArray
+
+from cosmology.api import CosmologyNamespace
+from cosmology.api.compat import CosmologyWrapper as CosmologyWrapperAPI
 
 __all__: list[str] = []
 
+if TYPE_CHECKING:
+    from typing_extensions import TypeAlias
+
+
+NDFloating: TypeAlias = NDArray[floating[Any]]
+InputT: TypeAlias = Union[NDFloating, float]
+
 
 @dataclass(frozen=True)
-class CAMBCosmology(CosmologyWrapper[NDArray[floating[Any]], ArrayLike]):
+class CosmologyWrapper(CosmologyWrapperAPI[NDFloating, InputT]):
     """The Cosmology API wrapper for :mod:`camb`."""
 
     cosmo: camb.CAMBdata
@@ -28,13 +36,13 @@ class CAMBCosmology(CosmologyWrapper[NDArray[floating[Any]], ArrayLike]):
         the type of ``self.cosmo`` must be ``CAMBdata`` at object creation
         and cannot be later processed here.
         """
-        if not isinstance(self.cosmo, (camb.CAMBdata, camb.CAMBParams)):
+        if not isinstance(self.cosmo, (camb.CAMBdata, camb.CAMBparams)):
             msg = (
                 "cosmo must be a CAMBdata or CAMBParams instance, "
                 f"not {type(self.cosmo)}"
             )
             raise TypeError(msg)
-        elif isinstance(self.cosmo, camb.CAMBParams):
+        elif isinstance(self.cosmo, camb.CAMBparams):
             cosmo = camb.get_background(self.cosmo)
             params = self.cosmo
 
@@ -43,12 +51,22 @@ class CAMBCosmology(CosmologyWrapper[NDArray[floating[Any]], ArrayLike]):
         else:
             params = self.cosmo.Params
 
-        self.params: camb.CAMBparams
-        object.__setattr__(self, "params", params)
+        self._params: camb.CAMBparams
+        object.__setattr__(self, "_params", params)
+
+        self._cosmo_fn: dict[str, Any]
+        object.__setattr__(self, "_cosmo_fn", {})
 
     @property
-    def __cosmology_namespace__(self, /) -> CosmologyNamespace:
-        """Returns a `CosmologyNamespace` with the cosmology API functions."""
+    def __cosmology_namespace__(self) -> CosmologyNamespace:
+        """Returns an object that has all the cosmology API functions on it.
+
+        Returns
+        -------
+        `CosmologyNamespace`
+            An object representing the CAMB cosmology API namespace.
+
+        """
         import cosmology.compat.camb as namespace
 
         return cast(CosmologyNamespace, namespace)
